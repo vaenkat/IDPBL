@@ -228,10 +228,17 @@ header p {
     max-height: 600px;
 }
 
+.image-wrapper {
+    position: relative;
+    display: inline-block;
+}
+
 #floorImage {
     max-width: 100%;
     max-height: 100%;
     display: block;
+    height: auto;
+    width: auto;
 }
 
 .path-canvas {
@@ -261,6 +268,7 @@ header p {
     white-space: nowrap;
     transform: translate(-50%, -50%);
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    z-index: 10;
 }
 
 .room-label.start {

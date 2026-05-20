@@ -12,6 +12,7 @@ class NavigationApp {
         this.ctx = null;
         this.floorImage = null;
         this.imageLoaded = false;
+        this.imageWrapper = null;
 
         this.initElements();
         this.setupEventListeners();
@@ -35,11 +36,13 @@ class NavigationApp {
             pathSteps: document.getElementById('pathSteps'),
             pathStats: document.getElementById('pathStats'),
             errorMsg: document.getElementById('errorMsg'),
-            floorButtons: document.querySelectorAll('.floor-btn')
+            floorButtons: document.querySelectorAll('.floor-btn'),
+            imageWrapper: document.querySelector('.image-wrapper')
         };
 
         this.canvas = this.elements.pathCanvas;
         this.ctx = this.canvas.getContext('2d');
+        this.imageWrapper = this.elements.imageWrapper;
     }
 
     /**
@@ -48,9 +51,13 @@ class NavigationApp {
     setupCanvas() {
         this.floorImage = new Image();
         this.floorImage.onload = () => {
+            console.log('Image loaded:', this.floorImage.width, 'x', this.floorImage.height);
             this.imageLoaded = true;
             this.resizeCanvas();
             this.drawCurrentFloor();
+        };
+        this.floorImage.onerror = () => {
+            console.error('Failed to load image:', this.floorImage.src);
         };
         this.loadFloorImage(this.currentFloor);
 
@@ -68,12 +75,26 @@ class NavigationApp {
      * Resize canvas to match image size
      */
     resizeCanvas() {
-        if (!this.elements.floorImage.complete) return;
+        if (!this.imageLoaded) return;
         
-        const rect = this.elements.floorImage.getBoundingClientRect();
+        // Get the actual image dimensions
+        const imgWidth = this.floorImage.width;
+        const imgHeight = this.floorImage.height;
         
-        this.canvas.width = rect.width;
-        this.canvas.height = rect.height;
+        // Get the displayed size
+        const displayWidth = this.elements.floorImage.offsetWidth;
+        const displayHeight = this.elements.floorImage.offsetHeight;
+        
+        console.log('Resizing canvas:', displayWidth, 'x', displayHeight);
+        
+        // Set canvas to match displayed image size
+        this.canvas.width = displayWidth;
+        this.canvas.height = displayHeight;
+        
+        // Position canvas over image
+        this.canvas.style.position = 'absolute';
+        this.canvas.style.top = '0';
+        this.canvas.style.left = '0';
         
         if (this.currentPath) {
             this.drawPath();
@@ -84,12 +105,17 @@ class NavigationApp {
      * Setup event listeners
      */
     setupEventListeners() {
-        this.elements.findPathBtn.addEventListener('click', () => {
+        console.log('Setting up event listeners');
+        
+        this.elements.findPathBtn.addEventListener('click', (e) => {
             console.log('Find Path button clicked');
+            e.preventDefault();
             this.findPath();
         });
-        this.elements.clearBtn.addEventListener('click', () => {
+        
+        this.elements.clearBtn.addEventListener('click', (e) => {
             console.log('Clear button clicked');
+            e.preventDefault();
             this.clearPath();
         });
         
@@ -150,12 +176,15 @@ class NavigationApp {
         // Load floor image
         this.loadFloorImage(floorNumber);
         
-        // Redraw
-        if (this.currentPath) {
-            this.drawPath();
-        } else {
-            this.displayRoomLabels();
-        }
+        // Wait for image to load before redrawing
+        setTimeout(() => {
+            this.resizeCanvas();
+            if (this.currentPath) {
+                this.drawPath();
+            } else {
+                this.displayRoomLabels();
+            }
+        }, 100);
     }
 
     /**
@@ -165,11 +194,12 @@ class NavigationApp {
         const start = this.elements.startLocation.value;
         const end = this.elements.endLocation.value;
 
-        console.log('Finding path from', start, 'to', end);
+        console.log('Finding path from "' + start + '" to "' + end + '"');
 
         // Validation
         if (!start || !end) {
             this.showError('Please select both start and end locations');
+            console.log('Validation failed: start or end is empty');
             return;
         }
 
@@ -178,24 +208,32 @@ class NavigationApp {
             return;
         }
 
-        // Find path
-        const result = pathfinder.findShortestPath(start, end);
-
-        if (!result) {
-            this.showError('No path found between selected locations');
+        // Check if pathfinder exists
+        if (!pathfinder) {
+            this.showError('Navigation system not initialized. Please refresh the page.');
+            console.error('Pathfinder is not defined');
             return;
         }
 
-        console.log('Path found:', result);
+        // Find path
+        const result = pathfinder.findShortestPath(start, end);
+        console.log('Pathfinding result:', result);
+
+        if (!result) {
+            this.showError('No path found between selected locations');
+            console.error('No path found between', start, 'and', end);
+            return;
+        }
 
         this.currentPath = result;
         this.currentPathDetails = pathfinder.getPathDetails(result);
         
+        console.log('Path details:', this.currentPathDetails);
+        
         this.hideError();
         this.displayPathInfo();
-        this.drawPath();
         
-        // Switch to start floor
+        // Switch to start floor and draw path
         const startRoom = getRoom(start);
         if (startRoom) {
             this.switchFloor(startRoom.floor);
@@ -208,6 +246,8 @@ class NavigationApp {
     displayPathInfo() {
         const details = this.currentPathDetails;
         
+        if (!details) return;
+        
         // Display steps
         let stepsHTML = '';
         details.steps.forEach((step, index) => {
@@ -215,7 +255,7 @@ class NavigationApp {
             stepsHTML += `<div class="${stepClass}"><strong>Step ${index + 1}:</strong> ${step.description}</div>`;
         });
 
-        this.elements.pathSteps.innerHTML = stepsHTML;
+        this.elements.pathSteps.innerHTML = stepsHTML || '<p>No steps available</p>';
 
         // Display statistics
         let statsHTML = '';
@@ -240,9 +280,15 @@ class NavigationApp {
      * Draw path on canvas
      */
     drawPath() {
-        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        console.log('Drawing path on canvas');
+        
+        if (!this.currentPath || !this.imageLoaded) {
+            console.log('Cannot draw: path=' + !!this.currentPath + ', imageLoaded=' + this.imageLoaded);
+            return;
+        }
 
-        if (!this.currentPath) return;
+        // Clear canvas
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
         const path = this.currentPath.path;
         const details = this.currentPathDetails;
@@ -263,7 +309,16 @@ class NavigationApp {
             }
         }
 
-        if (currentFloorRooms.length === 0) return;
+        console.log('Current floor rooms:', currentFloorRooms.length);
+
+        if (currentFloorRooms.length === 0) {
+            console.log('No rooms on current floor in path');
+            return;
+        }
+
+        // Calculate scale
+        const scaleX = this.canvas.width / this.floorImage.width;
+        const scaleY = this.canvas.height / this.floorImage.height;
 
         // Draw lines connecting rooms on current floor
         if (currentFloorRooms.length > 1) {
@@ -272,38 +327,39 @@ class NavigationApp {
             this.ctx.lineCap = 'round';
             this.ctx.lineJoin = 'round';
 
-            // Calculate scale
-            const scale = this.canvas.width / this.floorImage.width;
-
             for (let i = 0; i < currentFloorRooms.length - 1; i++) {
                 const room1 = currentFloorRooms[i].data;
                 const room2 = currentFloorRooms[i + 1].data;
 
+                const x1 = room1.x * scaleX;
+                const y1 = room1.y * scaleY;
+                const x2 = room2.x * scaleX;
+                const y2 = room2.y * scaleY;
+
+                console.log(`Drawing line from (${x1}, ${y1}) to (${x2}, ${y2})`);
+
                 this.ctx.beginPath();
-                this.ctx.moveTo(room1.x * scale, room1.y * scale);
-                this.ctx.lineTo(room2.x * scale, room2.y * scale);
+                this.ctx.moveTo(x1, y1);
+                this.ctx.lineTo(x2, y2);
                 this.ctx.stroke();
             }
         }
 
         // Draw points for rooms on current floor
         currentFloorRooms.forEach((room, idx) => {
-            const scale = this.canvas.width / this.floorImage.width;
-            const x = room.data.x * scale;
-            const y = room.data.y * scale;
+            const x = room.data.x * scaleX;
+            const y = room.data.y * scaleY;
 
-            // Draw circle
+            // Determine color
             if (idx === 0) {
-                // Start point
-                this.ctx.fillStyle = '#4caf50';
+                this.ctx.fillStyle = '#4caf50'; // Green for start
             } else if (idx === currentFloorRooms.length - 1) {
-                // End point
-                this.ctx.fillStyle = '#f44336';
+                this.ctx.fillStyle = '#f44336'; // Red for end
             } else {
-                // Middle point
-                this.ctx.fillStyle = '#667eea';
+                this.ctx.fillStyle = '#667eea'; // Blue for middle
             }
 
+            // Draw circle
             this.ctx.beginPath();
             this.ctx.arc(x, y, 8, 0, 2 * Math.PI);
             this.ctx.fill();
@@ -314,47 +370,49 @@ class NavigationApp {
             this.ctx.stroke();
         });
 
+        console.log('Path drawn successfully');
         this.displayRoomLabels();
     }
 
     /**
-     * Display room labels and highlight rooms
+     * Display room labels
      */
     displayRoomLabels() {
         this.elements.roomLabels.innerHTML = '';
 
+        if (!this.imageLoaded) return;
+
         const roomsOnFloor = getRoomsByFloor(this.currentFloor);
         const roomsToDisplay = {};
 
-        // Collect all rooms on current floor
+        // Collect all rooms on current floor (excluding stairs/elevators)
         Object.entries(roomsOnFloor).forEach(([name, coords]) => {
             if (coords && !name.includes('Stairs') && !name.includes('Elevator')) {
                 roomsToDisplay[name] = coords;
             }
         });
 
+        // Calculate scale
+        const scaleX = this.canvas.width / this.floorImage.width;
+        const scaleY = this.canvas.height / this.floorImage.height;
+
         // Highlight start and end rooms
         const startRoom = this.currentPathDetails ? getRoom(this.currentPathDetails.start) : null;
         const endRoom = this.currentPathDetails ? getRoom(this.currentPathDetails.end) : null;
-
-        // Calculate scale
-        const scale = this.canvas.width / this.floorImage.width;
 
         Object.entries(roomsToDisplay).forEach(([name, coords]) => {
             const label = document.createElement('div');
             label.className = 'room-label';
 
             if (startRoom && name === this.currentPathDetails.start && startRoom.floor === this.currentFloor) {
-                label.classList.add('start');
                 label.style.background = '#4caf50';
             } else if (endRoom && name === this.currentPathDetails.end && endRoom.floor === this.currentFloor) {
-                label.classList.add('end');
                 label.style.background = '#f44336';
             }
 
             label.textContent = name;
-            label.style.left = (coords.x * scale) + 'px';
-            label.style.top = (coords.y * scale) + 'px';
+            label.style.left = (coords.x * scaleX) + 'px';
+            label.style.top = (coords.y * scaleY) + 'px';
 
             this.elements.roomLabels.appendChild(label);
         });
@@ -378,6 +436,7 @@ class NavigationApp {
      * Show error message
      */
     showError(message) {
+        console.error('Error:', message);
         this.elements.errorMsg.textContent = message;
         this.elements.errorMsg.classList.remove('hidden');
     }
@@ -403,9 +462,25 @@ class NavigationApp {
 
 // Initialize app when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('DOM Content Loaded, initializing app...');
+    console.log('=== DOM Content Loaded ===' );
+    console.log('Checking dependencies...');
+    
+    // Check if required functions exist
+    if (typeof getRoomsAsArray !== 'function') {
+        console.error('❌ getRoomsAsArray not found');
+        return;
+    }
+    
+    if (typeof pathfinder === 'undefined') {
+        console.error('❌ Pathfinder not initialized');
+        return;
+    }
+    
+    console.log('✅ All dependencies loaded');
+    
     const app = new NavigationApp();
     window.navigationApp = app;
+    
     console.log('🏢 Building Navigation System initialized');
     console.log('Total rooms:', Object.keys(getAllRooms()).length);
 });
