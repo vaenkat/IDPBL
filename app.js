@@ -131,7 +131,11 @@ class NavigationApp {
      * Load floor image
      */
     loadFloorImage(floorNumber) {
-        this.floorImage.src = `floor${floorNumber}.jpeg`;
+        const imageSrc = `floor${floorNumber}.jpeg`;
+        this.floorImage.src = imageSrc;
+        if (this.elements.floorImage) {
+            this.elements.floorImage.src = imageSrc;
+        }
     }
 
     /**
@@ -140,22 +144,18 @@ class NavigationApp {
     resizeCanvas() {
         if (!this.imageLoaded) return;
         
-        // Get the actual image dimensions
-        const imgWidth = this.floorImage.width;
-        const imgHeight = this.floorImage.height;
-        
-        // Get the displayed size
-        const displayWidth = this.elements.floorImage.offsetWidth;
-        const displayHeight = this.elements.floorImage.offsetHeight;
-        
-        // Set canvas to match displayed image size
+        const imgEl = this.elements.floorImage;
+        // Use the rendered size of the <img> element
+        const displayWidth = imgEl.offsetWidth || imgEl.clientWidth;
+        const displayHeight = imgEl.offsetHeight || imgEl.clientHeight;
+
+        if (!displayWidth || !displayHeight) return;
+
+        // Set canvas drawing buffer to match rendered image pixels
         this.canvas.width = displayWidth;
         this.canvas.height = displayHeight;
-        
-        // Position canvas over image
-        this.canvas.style.position = 'absolute';
-        this.canvas.style.top = '0';
-        this.canvas.style.left = '0';
+        this.canvas.style.width = displayWidth + 'px';
+        this.canvas.style.height = displayHeight + 'px';
         
         if (this.currentPath) {
             this.drawPath();
@@ -388,7 +388,12 @@ class NavigationApp {
             const room = path[i];
             const roomData = getRoom(room);
             
-            if (roomData && roomData.floor === this.currentFloor) {
+            const isOnFloor = roomData && (
+                roomData.floor === this.currentFloor || 
+                (roomData.floors && roomData.floors.includes(this.currentFloor))
+            );
+            
+            if (isOnFloor) {
                 currentFloorRooms.push({
                     name: room,
                     index: i,

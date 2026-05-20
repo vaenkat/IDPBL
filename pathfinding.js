@@ -208,14 +208,16 @@ class Pathfinder {
 
         const steps = [];
         const floors = new Set();
+        let lastKnownFloor = null;
 
         // Analyze path and create step descriptions
         for (let i = 0; i < path.length; i++) {
             const currentName = path[i];
             const currentRoom = getRoom(currentName);
 
-            if (currentRoom) {
+            if (currentRoom && currentRoom.floor !== undefined) {
                 floors.add(currentRoom.floor);
+                lastKnownFloor = currentRoom.floor;
             }
 
             // Check if we're at a staircase or elevator
@@ -224,13 +226,13 @@ class Pathfinder {
                     const nextName = path[i + 1];
                     const nextRoom = getRoom(nextName);
                     
-                    if (nextRoom && currentRoom) {
-                        if (nextRoom.floor > currentRoom.floor) {
+                    if (nextRoom && lastKnownFloor !== null && nextRoom.floor !== undefined) {
+                        if (nextRoom.floor > lastKnownFloor) {
                             steps.push({
                                 type: 'stairs',
                                 description: `Take ${currentName} up to Floor ${nextRoom.floor}`
                             });
-                        } else if (nextRoom.floor < currentRoom.floor) {
+                        } else if (nextRoom.floor < lastKnownFloor) {
                             steps.push({
                                 type: 'stairs',
                                 description: `Take ${currentName} down to Floor ${nextRoom.floor}`
